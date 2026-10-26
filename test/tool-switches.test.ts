@@ -36,6 +36,7 @@ import {
 import type { Env } from "../src/env";
 import { encodeFolderId, encodeMessageId } from "../src/mail/ids";
 import { createMcpApiHandler, DEPLOYED_HOSTNAME } from "../src/mcp/api-handler";
+import { SERVER_INSTRUCTIONS, UNATTENDED_MOVES_SECTION } from "../src/mcp/instructions";
 import { createServerFactory } from "../src/mcp/server";
 import {
   DEFAULT_TOOL_POLICY,
@@ -577,5 +578,66 @@ describe("the rules job cannot step around a switch (point 3, the agent)", () =>
       expect(text, path).not.toMatch(/from\s+"\.\.\/mcp\//);
       expect(text, path).not.toMatch(/registerTool\(/);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Moves without asking (the mail_unattended_moves capability)
+// ---------------------------------------------------------------------------
+
+// @ts-expect-error -- Vite's `import.meta.glob` has no ambient declaration here.
+const SERVER_GLOB: Record<string, string> = import.meta.glob("../src/mcp/server.ts", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+const SERVER_SOURCE: string = Object.values(SERVER_GLOB)[0] ?? "";
+
+describe("moves without asking are a switch, off by default", () => {
+  async function instructionsUnder(policy: ToolPolicy): Promise<unknown> {
+    // A tools/list after the initialize, so the exchange waits long enough
+    // for the initialize answer too.
+    const answers = await exchange(policy, [{ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }]);
+    return (answers.get(1)?.result as { instructions?: unknown } | undefined)?.instructions;
+  }
+
+  async function confirmTokenTextUnder(policy: ToolPolicy): Promise<string> {
+    const answers = await exchange(policy, [{ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }]);
+    const tools = (answers.get(2)?.result as { tools: { name: string; inputSchema: unknown }[] }).tools;
+    const commit = tools.find((tool) => tool.name === "mail_commit")!;
+    return (commit.inputSchema as { properties: { confirmToken: { description: string } } }).properties
+      .confirmToken.description;
+  }
+
+  it("serves the default instructions, unchanged, when the switch is off", async () => {
+    expect(await instructionsUnder(DEFAULT_TOOL_POLICY)).toBe(SERVER_INSTRUCTIONS);
+  });
+
+  it("adds the section, and only it, when the switch is on", async () => {
+    const policy = policyOf({ ENABLE_RISKY_TOOLS: "mail_unattended_moves" });
+    expect(await instructionsUnder(policy)).toBe(SERVER_INSTRUCTIONS + UNATTENDED_MOVES_SECTION);
+  });
+
+  it("keeps the section's own fences: existing folders, no Trash or Junk, never a draft", () => {
+    expect(UNATTENDED_MOVES_SECTION).toContain("only into folders that already exist");
+    expect(UNATTENDED_MOVES_SECTION).toContain("refuses the Trash and Junk folders");
+    expect(UNATTENDED_MOVES_SECTION).toContain("Never move a draft");
+    expect(UNATTENDED_MOVES_SECTION).toContain("never from what it asks");
+  });
+
+  it("tells mail_commit's caller the user must see a move preview unless the switch is on", async () => {
+    expect(await confirmTokenTextUnder(DEFAULT_TOOL_POLICY)).toContain(
+      "The user must have seen the preview's confirmationLine word for word",
+    );
+    const relaxed = await confirmTokenTextUnder(policyOf({ ENABLE_RISKY_TOOLS: "mail_unattended_moves" }));
+    expect(relaxed).toContain("the user has allowed moves without seeing each preview");
+    // Trash and draft previews are still shown to the user.
+    expect(relaxed).toContain("For a trash or draft preview, the user must have seen");
+  });
+
+  it("wires the Trash and Junk fence to mail_trash, and the description to the capability", () => {
+    expect(SERVER_SOURCE).toContain('refuseDisposal: !policy.enabled("mail_trash"),');
+    expect(SERVER_SOURCE).toContain('unattendedMoves: policy.allows("mail_unattended_moves"),');
+    expect(SERVER_SOURCE).toContain("registerMailTools(server, leasedMail, principal, mailToolOptions);");
   });
 });

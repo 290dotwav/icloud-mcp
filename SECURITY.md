@@ -396,6 +396,16 @@ good or empties Trash, and a message in Trash can be moved back. The list of
 messages is always the one you picked, never one built from a search or from
 what a message says.
 
+**Moves without asking, when the owner switches them on.** With the
+`mail_unattended_moves` capability (owner decision, 2026-10-26), the model may
+choose the messages itself, including in a scheduled task with nobody present,
+and commit a `mail_move` or `mail_archive` without showing each preview. The
+cost: a message a stranger wrote can try to steer where mail is filed. What
+bounds it: moves only reach folders that already exist; while `mail_trash` is
+off, `mail_move` refuses the Trash and Junk folders, which iCloud may empty on
+its own; nothing is removed for good; and trash and draft previews are still
+shown to the user. It is off by default.
+
 Deleting a draft is the same move, for one draft, to Trash. It acts only on a
 draft in the drafts folder, exactly as the preview showed it. It does not check
 who wrote the draft.
@@ -425,6 +435,7 @@ They are **off unless the owner switches them on**, with the Worker var
 | `calendar_delete_calendar` | Removes a whole calendar and every event in it |
 | `calendar_respond_to_invitation` | iCloud tells the organiser, and a reply cannot be unsent |
 | `calendar_attendees` (a capability, not a tool) | Without it, `calendar_create_event` refuses any attendee and `calendar_update_event` refuses an event that has attendees, because iCloud would email them |
+| `mail_unattended_moves` (a capability, not a tool) | With it, the model may pick messages and move them with `mail_move` or `mail_archive` without the user seeing each preview. See "Moving mail is previewed" below |
 
 Two more vars: `DISABLED_TOOLS` switches off any tool, and `MCP_READ_ONLY=true`
 switches off every tool that writes (every preview, commit, draft, and contact,
@@ -463,9 +474,7 @@ switched off come back on. Keep the switches in `wrangler.jsonc`, or set
 does not say which value wins when a var is set in both places with `keep_vars`
 on; this has not been tested here.
 
-**What the switches do not cover.** `mail_move` can move mail to the Trash
-folder while `mail_trash` is off (add `mail_move` to `DISABLED_TOOLS` to stop
-it; nothing is removed for good either way). `calendar_delete_event`, once on,
+**What the switches do not cover.** `calendar_delete_event`, once on,
 is not gated by `calendar_attendees`. These vars are configuration, not
 secrets: anyone who can edit the Worker's settings can change them.
 

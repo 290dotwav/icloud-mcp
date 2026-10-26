@@ -462,7 +462,7 @@ describe("src/mcp/server.ts hands the driven server to the mail registrars only"
 
   it("registerMailTools, registerRecallTools and registerChangesTool get the driven server", () => {
     const block = drivenBlock();
-    expect(block).toContain("registerMailTools(server, leasedMail, principal);");
+    expect(block).toContain("registerMailTools(server, leasedMail, principal, mailToolOptions);");
     expect(block).toContain("registerRecallTools(server, principal);");
     expect(block).toContain("registerChangesTool(server, leasedMail, principal, davFetch);");
     // And each of them is registered nowhere else.

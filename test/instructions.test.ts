@@ -36,7 +36,7 @@
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import type { JSONRPCMessage } from "@modelcontextprotocol/server";
 import { describe, expect, it } from "vitest";
-import { SERVER_INSTRUCTIONS } from "../src/mcp/instructions";
+import { SERVER_INSTRUCTIONS, UNATTENDED_MOVES_SECTION } from "../src/mcp/instructions";
 import { createServerFactory } from "../src/mcp/server";
 import { RECALL_BACKFILL_MAX_PAGES } from "../src/recall/sync";
 import { ownerPrincipal } from "./fixtures/bound-secrets";
@@ -215,7 +215,10 @@ describe("the server-level instructions reach a client", () => {
       "the initialize result carries no instructions. The string exists as a " +
         "constant but is not reaching the SDK -- check the second argument to " +
         "new McpServer in src/mcp/server.ts.",
-    ).toBe(SERVER_INSTRUCTIONS);
+      // This server is built with every switch on, so the section the
+      // `mail_unattended_moves` capability adds is appended. The default text
+      // alone is pinned in test/tool-switches.test.ts.
+    ).toBe(SERVER_INSTRUCTIONS + UNATTENDED_MOVES_SECTION);
   });
 
   it("is not empty, and is the one the source exports", () => {
@@ -225,7 +228,7 @@ describe("the server-level instructions reach a client", () => {
   });
 
   it("is pure ASCII, so no client can receive it mangled", () => {
-    const offending = [...SERVER_INSTRUCTIONS].filter(
+    const offending = [...(SERVER_INSTRUCTIONS + UNATTENDED_MOVES_SECTION)].filter(
       (character) => character.codePointAt(0)! > 0x7f,
     );
 

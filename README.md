@@ -236,6 +236,17 @@ them: `mail_trash`, `mail_delete_draft`, `calendar_delete_event`,
 any attendee, and `calendar_update_event` refuses to change an event that has
 attendees, because iCloud would email those people.
 
+**Moves without asking.** The `mail_unattended_moves` capability, also off by
+default, lets Claude choose which messages to move with `mail_move` or
+`mail_archive`, and apply the move without showing you each preview, for
+example in a scheduled task that files your mail. Moves only reach folders that
+already exist. A message a stranger wrote can try to steer where mail is filed;
+nothing is ever removed for good.
+
+**Trash and Junk.** While `mail_trash` is off, `mail_move` refuses the Trash
+and Junk folders, so it cannot stand in for it, and nothing reaches a folder
+iCloud may empty on its own. Make an ordinary folder for mail to delete instead.
+
 **What read-only switches off.** Every preview and every commit, both compose
 tools and the two attachment staging tools, read status, the flag, moves, every
 calendar write, every contact write, and `rules_add`, `rules_commit` and
@@ -301,9 +312,6 @@ npm run deploy
 
 #### What the switches do not cover
 
-- `mail_move` can still move mail to the Trash folder while `mail_trash` is
-  off, because it moves to any folder. Nothing is removed for good either way.
-  To stop it, add `mail_move` to `DISABLED_TOOLS`.
 - `calendar_delete_event`, once you switch it on, is not gated by
   `calendar_attendees`. Whether iCloud emails a cancellation when an event with
   attendees is deleted has not been measured.

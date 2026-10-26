@@ -117,7 +117,8 @@
   //   ENABLE_RISKY_TOOLS  comma-separated risky tools to switch ON:
   //                       mail_trash, mail_delete_draft, calendar_delete_event,
   //                       calendar_delete_calendar, calendar_respond_to_invitation,
-  //                       and the capability calendar_attendees. Empty: all off.
+  //                       and the capabilities calendar_attendees and
+  //                       mail_unattended_moves. Empty: all off.
   //   DISABLED_TOOLS      comma-separated tools to switch OFF. Off always wins.
   //   MCP_READ_ONLY       "true" switches off every tool that writes.
   // A name the server does not know makes every /mcp request answer 503 until

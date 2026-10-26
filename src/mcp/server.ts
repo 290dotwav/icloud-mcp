@@ -12,7 +12,7 @@ import { createSessionGate } from "../mail/service";
 import { answersDuringPause } from "../password-pause";
 import type { Principal } from "../principal";
 import { type GrantClient, withRecallStep } from "../recall/drive";
-import { SERVER_INSTRUCTIONS } from "./instructions";
+import { serverInstructions } from "./instructions";
 import { withToolPolicy } from "./tool-filter";
 import { DEFAULT_TOOL_POLICY, type ToolPolicy } from "./tool-policy";
 import { registerAccountTool } from "./tools/account";
@@ -74,7 +74,9 @@ export function createServerFactory(
     // names -- see `./instructions.ts` for the measurement that prompted it.
     const mcpServer = new McpServer(
       { name: "icloud-mcp", version: "0.1.0" },
-      { instructions: SERVER_INSTRUCTIONS },
+      // The default text, plus a section for each capability the tool
+      // switches turn on (`./instructions.ts`).
+      { instructions: serverInstructions(policy.allows("mail_unattended_moves")) },
     );
     // **The tool switches, applied to every registrar below** (`./tool-filter.ts`).
     // `server` is the same server, except that a tool the policy switches off
@@ -182,8 +184,16 @@ export function createServerFactory(
     // is named `server` on purpose, so each registration below reads exactly as
     // it did before the build was driven, and the one line after this block is
     // where the driven server goes in.
+    // What the tool switches change inside the mail tools: while `mail_trash`
+    // is off, `mail_move` refuses the Trash and Junk folders, so it cannot
+    // stand in for it; and `mail_commit` says whether the owner allowed moves
+    // without asking.
+    const mailToolOptions = {
+      refuseDisposal: !policy.enabled("mail_trash"),
+      unattendedMoves: policy.allows("mail_unattended_moves"),
+    };
     const registerMailRegistrars = (server: McpServer): void => {
-      registerMailTools(server, leasedMail, principal);
+      registerMailTools(server, leasedMail, principal, mailToolOptions);
       // Recall by meaning (Phase 26, RCLL-08). The same principal promise the
       // mail tools get, and nothing else: no leased runner, because it opens
       // no mail session. It reads the person's own object and their own part

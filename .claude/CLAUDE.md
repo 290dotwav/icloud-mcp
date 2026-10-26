@@ -815,11 +815,26 @@ verb: moving one draft to Trash.
      tell the model to write the new draft first. A wrong order loses nothing
      for good, because the old draft is in Trash.
 
-5. **How the read side is proved.** `test/read-path-wire.test.ts` holds the
+5. **Moves without asking are a switch, and that is a decision.** The owner
+   decided on 2026-10-26 that the model may choose which messages to move with
+   `mail_move` or `mail_archive`, and commit the move, without the user seeing
+   each preview, when the `mail_unattended_moves` capability is on
+   (`src/mcp/tool-policy.ts`). It is off unless `ENABLE_RISKY_TOOLS` names it.
+   What changes is who picks the messages and who reads the preview. Nothing in
+   the move itself changes: it is still previewed, sealed and committed, one
+   copy then one removal. The cost: a message a stranger wrote can try to steer
+   where mail is filed. What bounds it: nothing is removed for good; while
+   `mail_trash` is off, `mail_move` refuses the Trash and Junk folders, which
+   iCloud may empty on its own; the switch adds a section to the instructions
+   and never edits the default text; and trash and draft previews are still
+   shown to the user. Letting it reach Trash or Junk, a draft, or a delete is a
+   decision, not a refactor.
+
+6. **How the read side is proved.** `test/read-path-wire.test.ts` holds the
    exact commands every read sends. They were recorded before the split. Editing
    that file is a decision, not a fix.
 
-6. **What is a decision on this boundary, not a refactor.**
+7. **What is a decision on this boundary, not a refactor.**
    - A mode argument on either orchestrator.
    - A second place that opens a mailbox in the mutating form.
    - A second module that uses the mutating path.

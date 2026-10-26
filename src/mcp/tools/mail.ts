@@ -1805,6 +1805,10 @@ const MOVE_REFUSAL_REASONS = {
     "These messages changed after the preview, so nothing was moved. Preview the move again.",
   "already-in-destination":
     "The messages are already in the folder this would move them to. Nothing was moved.",
+  "destination-is-disposal":
+    "The destination is the account's Trash or Junk folder, which iCloud may empty on its " +
+    "own. Moving mail there is switched off on this server. Nothing was moved. Move it to " +
+    "an ordinary folder instead, such as one the user made for mail to delete.",
 } as const;
 
 type MoveRefusal = keyof typeof MOVE_REFUSAL_REASONS;
@@ -1926,6 +1930,10 @@ export async function buildMovePreview(
   request: MoveRequest,
   destination: MoveDestination,
   op: "move",
+  // True while the tool switches keep `mail_trash` off. A named folder whose
+  // role is Trash or Junk is then refused, so `mail_move` cannot stand in for
+  // the tool that is off, and nothing reaches a folder iCloud may empty.
+  refuseDisposal = false,
 ): Promise<ToolResult> {
   const first = request.refs[0]!;
   const source = { mailbox: first.mailbox, uidValidity: first.uidValidity };
@@ -1968,6 +1976,9 @@ export async function buildMovePreview(
     if (named === undefined) return moveRefusalResult("destination-not-found");
     if (destination.mailbox === source.mailbox) {
       return moveRefusalResult("destination-is-source");
+    }
+    if (refuseDisposal && (named.role === "trash" || named.role === "junk")) {
+      return moveRefusalResult("destination-is-disposal");
     }
     target = named;
     role = null;
@@ -2560,11 +2571,26 @@ function draftCommitResult(applied: DraftDeleteApplied): ToolResult {
  * The staging helpers still take the ambient `env`. They reach R2, not mail,
  * and hold no credential.
  */
+/**
+ * What the tool switches change in the mail tools (`src/mcp/tool-policy.ts`).
+ * The server factory derives both from the policy. The defaults are the
+ * behaviour before the switches existed, for the tests that build the mail
+ * tools on their own.
+ */
+export interface MailToolOptions {
+  /** Refuse a `mail_move` into the Trash or Junk folder (while `mail_trash` is off). */
+  readonly refuseDisposal?: boolean;
+  /** Moves may be committed without the user seeing each preview (`mail_unattended_moves`). */
+  readonly unattendedMoves?: boolean;
+}
+
 export function registerMailTools(
   server: McpServer,
   mail: LeasedMail,
   principal: Promise<Principal>,
+  options: MailToolOptions = {},
 ): void {
+  const refuseDisposal = options.refuseDisposal === true;
   server.registerTool(
     "mail_get_message",
     {
@@ -3841,6 +3867,7 @@ export function registerMailTools(
             { ids: [...ids], refs, destinationId: destination },
             { kind: "folder", mailbox: target.mailbox },
             "move",
+            refuseDisposal,
           ),
         );
       } catch (err) {
@@ -3993,9 +4020,15 @@ export function registerMailTools(
         confirmToken: z
           .string()
           .describe(
-            "The confirmToken from the preview, unaltered. The user must have " +
-              "seen the preview's confirmationLine word for word. It can be " +
-              "spent once.",
+            options.unattendedMoves === true
+              ? "The confirmToken from the preview, unaltered. It can be spent " +
+                  "once. For a move from mail_move or mail_archive, the user has " +
+                  "allowed moves without seeing each preview. For a trash or " +
+                  "draft preview, the user must have seen the preview's " +
+                  "confirmationLine word for word."
+              : "The confirmToken from the preview, unaltered. The user must have " +
+                  "seen the preview's confirmationLine word for word. It can be " +
+                  "spent once.",
           ),
         change: z
           .discriminatedUnion("op", [

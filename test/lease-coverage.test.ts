@@ -561,7 +561,7 @@ describe("no registrar is handed the raw gate (structural half)", () => {
   });
 
   it("every registrar that can open a mail session is handed the leased mail", () => {
-    expect(code).toContain("registerMailTools(server, leasedMail, principal);");
+    expect(code).toContain("registerMailTools(server, leasedMail, principal, mailToolOptions);");
     expect(code).toContain("registerDiagnoseTool(server, leasedMail, unpaused);");
     expect(code).toContain("registerChangesTool(server, leasedMail, principal, davFetch);");
     expect(code).toContain(

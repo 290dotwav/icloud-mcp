@@ -1975,3 +1975,59 @@ describe("archive and Trash refuse rather than guess, and Trash never says delet
     for (const line of words) expect(line).not.toMatch(/delet/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The tool switches: while mail_trash is off, mail_move refuses Trash and Junk
+// ---------------------------------------------------------------------------
+
+describe("mail_move refuses the Trash and Junk folders while mail_trash is off", () => {
+  /** mail_move, registered with these switch-derived options. */
+  function moveWith(options: { refuseDisposal?: boolean }): Callback {
+    const callbacks = new Map<string, Callback>();
+    const server = {
+      registerTool(name: string, _options: unknown, handler: Callback) {
+        callbacks.set(name, handler);
+      },
+    };
+    registerMailTools(
+      server as unknown as McpServer,
+      createLeasedMail(createSessionGate()),
+      ownerPrincipal(),
+      options,
+    );
+    return callbacks.get("mail_move")!;
+  }
+
+  const FOLDERS: [string, string][] = [
+    ["Deleted Messages", "\\HasNoChildren \\Trash"],
+    ["Junk", "\\HasNoChildren \\Junk"],
+    ["A supprimer", "\\HasNoChildren"],
+  ];
+
+  async function moveTo(options: { refuseDisposal?: boolean }, folder: string) {
+    const duplex = rolePreviewServer(FOLDERS, [ONE]);
+    vi.mocked(connectImap).mockReturnValueOnce(duplex as never);
+    const answer = await moveWith(options)({
+      ids: [idOf(ONE.uid)],
+      destination: encodeFolderId({ mailbox: folder }),
+    });
+    const lines = wireOf(duplex);
+    // A preview, refused or not, is the read path: nothing changes mail.
+    for (const word of CHANGING) expectNoLine(lines, word);
+    return answer;
+  }
+
+  it.each(["Deleted Messages", "Junk"])("refuses %s, and writes nothing", async (folder) => {
+    expectRefusal(await moveTo({ refuseDisposal: true }, folder), "destination-is-disposal");
+  });
+
+  it("previews a move into an ordinary folder, such as one made for mail to delete", async () => {
+    const answer = await moveTo({ refuseDisposal: true }, "A supprimer");
+    expect(body(answer).confirmToken).toEqual(expect.any(String));
+  });
+
+  it("previews a move into Trash when the switch is not given, as before", async () => {
+    const answer = await moveTo({}, "Deleted Messages");
+    expect(body(answer).confirmToken).toEqual(expect.any(String));
+  });
+});

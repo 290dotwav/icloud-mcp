@@ -82,7 +82,7 @@ describe("the catalogue", () => {
         "mail_trash",
       ].sort(),
     );
-    expect([...CAPABILITIES]).toEqual(["calendar_attendees"]);
+    expect([...CAPABILITIES]).toEqual(["calendar_attendees", "mail_unattended_moves"]);
   });
 
   it("counts every risky tool as a write, so read-only mode switches it off too", () => {
@@ -136,6 +136,17 @@ describe("ENABLE_RISKY_TOOLS (point 1)", () => {
 
   it("switches the attendee capability on only when named", () => {
     expect(policyOf({ ENABLE_RISKY_TOOLS: "calendar_attendees" }).allows("calendar_attendees")).toBe(true);
+  });
+
+  it("switches unattended moves on only when named, and never in read-only mode", () => {
+    expect(DEFAULT_TOOL_POLICY.allows("mail_unattended_moves")).toBe(false);
+    expect(policyOf({ ENABLE_RISKY_TOOLS: "mail_unattended_moves" }).allows("mail_unattended_moves")).toBe(true);
+    expect(policyOf({ ENABLE_RISKY_TOOLS: "calendar_attendees" }).allows("mail_unattended_moves")).toBe(false);
+    expect(
+      policyOf({ ENABLE_RISKY_TOOLS: "mail_unattended_moves", MCP_READ_ONLY: "true" }).allows(
+        "mail_unattended_moves",
+      ),
+    ).toBe(false);
   });
 
   it("accepts a JSON array as well as a comma-separated string", () => {

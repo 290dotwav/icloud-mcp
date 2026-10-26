@@ -110,14 +110,20 @@ export const TOOL_CATALOGUE: Readonly<Record<string, ToolClass>> = Object.freeze
 });
 
 /**
- * The capabilities: switches that are not a tool.
+ * The capabilities: switches that are not a tool. Both are risky, so both are
+ * off unless `ENABLE_RISKY_TOOLS` names them.
  *
  * `calendar_attendees` lets `calendar_create_event` invite people and lets
  * `calendar_update_event` change an event that has attendees. Both make iCloud
- * email those people, and an invitation cannot be unsent. It is risky, so it is
- * off unless `ENABLE_RISKY_TOOLS` names it.
+ * email those people, and an invitation cannot be unsent.
+ *
+ * `mail_unattended_moves` lets the model choose which messages to move with
+ * `mail_move` or `mail_archive`, and commit the move, without the user seeing
+ * each preview (owner decision, 2026-10-26). A message a stranger wrote can
+ * then try to steer where mail is filed. Nothing is removed for good, and while
+ * `mail_trash` is off no move may reach the Trash or Junk folder.
  */
-export const CAPABILITIES = Object.freeze(["calendar_attendees"] as const);
+export const CAPABILITIES = Object.freeze(["calendar_attendees", "mail_unattended_moves"] as const);
 
 /** One capability name. */
 export type Capability = (typeof CAPABILITIES)[number];

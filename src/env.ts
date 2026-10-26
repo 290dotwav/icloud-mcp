@@ -330,6 +330,25 @@ declare global {
       ALLOWED_APPLE_IDS_SEED: string | undefined;
 
       /**
+       * The per-tool switches. Three optional Worker vars, read on every
+       * request by the door and only through `parseToolPolicy` in
+       * `src/mcp/tool-policy.ts`, which says what each one means.
+       *
+       * - `ENABLE_RISKY_TOOLS`: comma-separated risky tools (and the
+       *   `calendar_attendees` capability) to switch on. Absent means none.
+       * - `DISABLED_TOOLS`: comma-separated tools to switch off.
+       * - `MCP_READ_ONLY`: `"true"` switches off every tool that writes.
+       *
+       * **Typed `unknown`, not `string`.** A `vars` entry can be written as
+       * JSON, and an absent one is undefined; the parse handles every shape.
+       * A name it does not know, or a value it cannot read, switches the whole
+       * server off with a message, so nothing is guessed.
+       */
+      ENABLE_RISKY_TOOLS?: unknown;
+      DISABLED_TOOLS?: unknown;
+      MCP_READ_ONLY?: unknown;
+
+      /**
        * Injected by the OAuth provider on every request before it dispatches
        * to a handler. This is how the authorize form reaches
        * `parseAuthRequest` / `completeAuthorization` without the handler

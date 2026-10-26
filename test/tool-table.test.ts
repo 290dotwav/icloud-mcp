@@ -41,6 +41,7 @@ import { RECALL_PAGE_SIZE } from "../src/recall/retention";
 import { RECALL_BACKFILL_BUDGET_MS, RECALL_BACKFILL_MAX_PAGES } from "../src/recall/sync";
 import { SAVE_LINK_TTL_MS } from "../src/save/link";
 import { ownerPrincipal } from "./fixtures/bound-secrets";
+import { ALL_TOOLS_POLICY } from "./fixtures/all-tools";
 
 // A Workers isolate has no filesystem, so files are read with Vite's
 // build-time glob, as the other source-reading tests do.
@@ -61,7 +62,7 @@ const README: string = Object.values(README_GLOB)[0] ?? "";
 
 /** The names the real server lists, sorted. */
 async function liveToolNames(): Promise<string[]> {
-  const server = await createServerFactory(ownerPrincipal())({ era: "modern" });
+  const server = await createServerFactory(ownerPrincipal(), [], undefined, ALL_TOOLS_POLICY)({ era: "modern" });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   const received: Record<string, unknown>[] = [];
   clientSide.onmessage = (message) => {

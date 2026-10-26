@@ -40,6 +40,7 @@ import { SERVER_INSTRUCTIONS } from "../src/mcp/instructions";
 import { createServerFactory } from "../src/mcp/server";
 import { RECALL_BACKFILL_MAX_PAGES } from "../src/recall/sync";
 import { ownerPrincipal } from "./fixtures/bound-secrets";
+import { ALL_TOOLS_POLICY } from "./fixtures/all-tools";
 
 // ---------------------------------------------------------------------------
 // The pin
@@ -144,7 +145,7 @@ async function askTheServer(
   // never returns one -- `createServerFactory`'s body is deliberately
   // synchronous, for the reason its own docstring records -- but narrowing by
   // `await` costs nothing and does not assert a property of that body.
-  const server = await createServerFactory(ownerPrincipal())({ era: "modern" });
+  const server = await createServerFactory(ownerPrincipal(), [], undefined, ALL_TOOLS_POLICY)({ era: "modern" });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   const received: Record<string, unknown>[] = [];
   clientSide.onmessage = (message) => {

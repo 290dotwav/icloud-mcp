@@ -176,6 +176,8 @@ are written relative to the directory in its heading.
 | `server.ts` | The per-request server factory: the session gate, the leased mail runner, the DAV fetch, the recall step seam, and every tool registration. |
 | `instructions.ts` | The server-level instructions a client shows the model with the tool list. |
 | `grant-client.ts` | Reads which client a request's grant belongs to, so recall and the save tool can refuse the autonomy key. |
+| `tool-policy.ts` | The per-tool switches: every tool's class (read, write, risky), the parse of `ENABLE_RISKY_TOOLS`, `DISABLED_TOOLS` and `MCP_READ_ONLY`, and which preview tool a commit would apply. Pure. |
+| `tool-filter.ts` | Enforces the switches: a tool that is off is never registered, and each commit tool refuses a confirmation from a preview tool that is off. |
 | `untrusted.ts` | The untrusted-content fence (notice, nonce, trusted/untrusted split). |
 
 ### Tool registrars (`mcp/tools/`)

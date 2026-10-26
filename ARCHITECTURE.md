@@ -86,6 +86,8 @@ auth code. When it needs mail, it calls this Worker's own `/mcp` through the
      asks the client to sign in again). It does not look the address up in the
      list, so taking someone off the list also means revoking their grants
      (README says how);
+   - parses the tool switches (`src/mcp/tool-policy.ts`). Vars it cannot read
+     make it answer 503 with a message, and serve nothing;
    - builds the principal from the grant's props: the user id and the Apple ID,
      with the password kept in a holder private to `src/principal.ts`;
    - wraps it in the dead-password pause check (`src/password-pause.ts`);
@@ -111,7 +113,9 @@ auth code. When it needs mail, it calls this Worker's own `/mcp` through the
    that gate, a DAV fetch, and the recall step seam. It then registers the
    tools: the IMAP diagnostic, the account answer, the mail, recall and change
    tools (through the recall step seam), the recall backfill, the DAV
-   diagnostic, calendar, contacts, rules and save.
+   diagnostic, calendar, contacts, rules and save. Every registration goes
+   through the tool filter (`src/mcp/tool-filter.ts`), so a tool the switches
+   turn off is never registered.
 
 6. **A mail tool call.** The tool takes the person's lease in their
    `UserAgent` before it opens an iCloud connection, and gives it back after
@@ -176,6 +180,8 @@ are written relative to the directory in its heading.
 | `server.ts` | The per-request server factory: the session gate, the leased mail runner, the DAV fetch, the recall step seam, and every tool registration. |
 | `instructions.ts` | The server-level instructions a client shows the model with the tool list. |
 | `grant-client.ts` | Reads which client a request's grant belongs to, so recall and the save tool can refuse the autonomy key. |
+| `tool-policy.ts` | The per-tool switches: every tool's class (read, write, risky), the parse of `ENABLE_RISKY_TOOLS`, `DISABLED_TOOLS` and `MCP_READ_ONLY`, and which preview tool a commit would apply. Pure. |
+| `tool-filter.ts` | Enforces the switches: a tool that is off is never registered, and each commit tool refuses a confirmation from a preview tool that is off. |
 | `untrusted.ts` | The untrusted-content fence (notice, nonce, trusted/untrusted split). |
 
 ### Tool registrars (`mcp/tools/`)
@@ -481,6 +487,10 @@ both back unaltered. The pairs that exist:
 | `mail_move`, `mail_archive`, `mail_trash`, `mail_delete_draft` | `mail_commit` |
 | `rules_add` | `rules_commit` |
 
+Each commit tool also reads which preview made the confirmation it is handed,
+and refuses it, spending nothing, when the tool switches have since turned that
+preview tool off (`src/mcp/tool-filter.ts`).
+
 `src/confirm.ts` implements the token:
 
 - Sealed with HMAC-SHA-256 over `CONFIRM_SECRET`, imported as a non-extractable
@@ -634,6 +644,7 @@ The tracked config is `wrangler.jsonc.example` (all placeholders). The real
 | `LOGIN_IP_LIMITER`, `LOGIN_ID_LIMITER` | Rate limit | Sign-in attempts per address and per Apple ID. |
 | `SAVE_IP_LIMITER` | Rate limit | Save-link downloads per address. |
 | `R2_ACCOUNT_ID`, `ALLOWED_APPLE_IDS_SEED` | Vars | The R2 account for presigning; the seed half of the allow list. |
+| `ENABLE_RISKY_TOOLS`, `DISABLED_TOOLS`, `MCP_READ_ONLY` | Vars, optional | The tool switches, parsed by the door on every request (`src/mcp/tool-policy.ts`). An unknown name answers 503. |
 
 ### Secrets
 

@@ -55,6 +55,8 @@ on their own, and they live in configuration:
 - The deployed hostname.
 - The allow-list seed — the owner's own address, held as a config value because
   it is read on every request and a config read is synchronous.
+- The tool switches: `ENABLE_RISKY_TOOLS`, `DISABLED_TOOLS` and `MCP_READ_ONLY`
+  (see "Risky tools are off by default" below).
 
 In the public repository these config values are placeholders; the real ones
 live only in your git-ignored `wrangler.jsonc`.
@@ -409,6 +411,64 @@ is bound to a hash of the change so it cannot be altered before commit. This
 ensures you see *who* will be notified and *what* will change before anything
 irreversible happens.
 
+### Risky tools are off by default, and every tool has a switch
+
+Some tools do things that are hard to take back or that reach other people.
+They are **off unless the owner switches them on**, with the Worker var
+`ENABLE_RISKY_TOOLS` (a comma-separated list):
+
+| Off by default | Why |
+|----------------|-----|
+| `mail_trash` | Moves mail out of sight, into Trash |
+| `mail_delete_draft` | Moves a draft to Trash |
+| `calendar_delete_event` | Removes an event; iCloud may tell its attendees |
+| `calendar_delete_calendar` | Removes a whole calendar and every event in it |
+| `calendar_respond_to_invitation` | iCloud tells the organiser, and a reply cannot be unsent |
+| `calendar_attendees` (a capability, not a tool) | Without it, `calendar_create_event` refuses any attendee and `calendar_update_event` refuses an event that has attendees, because iCloud would email them |
+
+Two more vars: `DISABLED_TOOLS` switches off any tool, and `MCP_READ_ONLY=true`
+switches off every tool that writes (every preview, commit, draft, and contact,
+calendar and rule write). Off always wins over `ENABLE_RISKY_TOOLS`.
+
+**How it is enforced.**
+
+- A tool that is off is **not registered**. It is absent from `tools/list`,
+  and a call naming it is refused.
+- `mail_commit`, `calendar_commit`, `contacts_commit` and `rules_commit` read
+  the signed kind of the confirmation they are handed. If the preview tool that
+  made it is now off, they refuse it **without spending it**. So a valid
+  confirmation made before a tool was switched off cannot be applied after.
+- **A name the server does not know switches the server off.** An unknown name
+  in either list, a non-risky tool in `ENABLE_RISKY_TOOLS`, or an
+  `MCP_READ_ONLY` value that is neither `true` nor `false` makes every `/mcp`
+  request answer `503` with a message naming the problem. A typo in
+  `DISABLED_TOOLS` can never leave a tool on in silence. The message repeats
+  only values shaped like a tool name.
+- **The rules job cannot get around them.** Its Durable Object imports no mail,
+  DAV or tool code (the scan walks its imports), and reaches mail only by
+  calling this Worker's own `/mcp`, through the same door and the same
+  switches. In read-only mode it can no longer flag or draft.
+
+**How to change them.** In the `vars` block of your git-ignored
+`wrangler.jsonc`, then `npm run deploy`; or in the Cloudflare dashboard
+(Workers & Pages → your Worker → Settings → Variables and Secrets → Deploy).
+README's "Tool switches" section has the steps.
+
+**A deploy overwrites the dashboard.** Per Cloudflare's documentation, without
+`keep_vars`, `wrangler deploy` deletes every var and sets only the ones in the
+Wrangler configuration. A `MCP_READ_ONLY=true` or a `DISABLED_TOOLS` entry set
+only in the dashboard is therefore lost at the next deploy, and the tools it
+switched off come back on. Keep the switches in `wrangler.jsonc`, or set
+`"keep_vars": true`. Secrets are never deleted by a deploy. The documentation
+does not say which value wins when a var is set in both places with `keep_vars`
+on; this has not been tested here.
+
+**What the switches do not cover.** `mail_move` can move mail to the Trash
+folder while `mail_trash` is off (add `mail_move` to `DISABLED_TOOLS` to stop
+it; nothing is removed for good either way). `calendar_delete_event`, once on,
+is not gated by `calendar_attendees`. These vars are configuration, not
+secrets: anyone who can edit the Worker's settings can change them.
+
 ### Untrusted content is fenced
 
 Mail bodies, event titles, contact fields, and calendar names are data from the
@@ -480,7 +540,9 @@ still open for anyone who revisits this.
 **In scope:** authentication or authorization bypass; one person reaching
 another person's account, cache, staged files, counters, recall index or
 autonomy key; credential exposure in logs, responses, or errors; a path that
-sends mail, or makes a destructive change without its preview/commit gate; a
+sends mail, or makes a destructive change without its preview/commit gate;
+a way to call a tool, or apply a preview from a tool, that the tool switches
+turn off; a
 way to make the server mark mail read without being asked; the rules job doing
 anything beyond flagging a message and placing a draft reply; injection that
 escapes the untrusted-content fence into tool-calling behavior; the transport

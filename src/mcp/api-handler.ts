@@ -18,6 +18,12 @@ import { guardAgainstPause } from "../password-pause";
 import type { GrantClient } from "../recall/drive";
 import { grantClientOf } from "./grant-client";
 import { createServerFactory } from "./server";
+import {
+  DEFAULT_TOOL_POLICY,
+  type ToolPolicy,
+  misconfigurationMessage,
+  parseToolPolicy,
+} from "./tool-policy";
 
 /**
  * The single production hostname, as it must appear inside the Worker bundle.
@@ -333,6 +339,29 @@ function unauthorized(request: Request): Response {
 }
 
 /**
+ * The door's answer when the tool switches cannot be read.
+ *
+ * A 503, because nothing the client does can fix it: the owner has to fix the
+ * vars. The body says which entries are wrong and where to fix them. It
+ * repeats no value that is not shaped like a tool name (`misconfigurationMessage`).
+ */
+function misconfigured(problems: readonly string[]): Response {
+  return new Response(
+    JSON.stringify({
+      error: "server_misconfigured",
+      error_description: misconfigurationMessage(problems),
+    }),
+    {
+      status: 503,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
+    },
+  );
+}
+
+/**
  * Build the MCP handler for ONE request.
  *
  * The factory closes over the promise of the principal, so the tool layer gets
@@ -366,9 +395,13 @@ export function buildRequestHandler(
   // step; the door below passes the real reader, and the canary fixture keeps
   // the default.
   grantClient: GrantClient = async () => null,
+  // Which tools are served, passed straight to the factory. The door below
+  // passes the policy it parsed from the vars; the default serves no risky
+  // tool.
+  policy: ToolPolicy = DEFAULT_TOOL_POLICY,
 ): ReturnType<typeof createMcpHandler> {
   return createMcpHandler(
-    createServerFactory(principal, extraTools, grantClient),
+    createServerFactory(principal, extraTools, grantClient, policy),
     HANDLER_OPTIONS,
   );
 }
@@ -439,6 +472,13 @@ export function createMcpApiHandler(extraTools: ExtraTool[] = []): {
         return Promise.resolve(unauthorized(request));
       }
 
+      // The tool switches (`./tool-policy.ts`), re-read on every request like
+      // the seed above: a parse of three short strings, with no I/O and no
+      // await. A name the parse does not know switches the whole server off,
+      // so a typo in DISABLED_TOOLS can never leave a tool on in silence.
+      const tools = parseToolPolicy(env);
+      if (!tools.ok) return Promise.resolve(misconfigured(tools.problems));
+
       // Identity comes from the grant, never from the environment. That is the
       // whole of the Phase 11 switch at this line: the per-user principal is
       // the only live identity path from here on, and the environment-backed
@@ -478,6 +518,7 @@ export function createMcpApiHandler(extraTools: ExtraTool[] = []): {
         principal,
         extraTools,
         grantClientOf(request, env.OAUTH_KV),
+        tools.policy,
       )(request, env, ctx);
     },
   };

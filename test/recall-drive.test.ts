@@ -28,6 +28,7 @@ import type { Principal } from "../src/principal";
 import { RECALL_DRIVEN, runRecallStep, withRecallStep } from "../src/recall/drive";
 import { productionStepDeps, recallStep } from "../src/recall/sync";
 import { ownerPrincipal } from "./fixtures/bound-secrets";
+import { ALL_TOOLS_POLICY } from "./fixtures/all-tools";
 
 type Answer = { content: { type: "text"; text: string }[]; isError?: boolean };
 type Callback = (...args: unknown[]) => Promise<Answer>;
@@ -310,7 +311,7 @@ describe("runRecallStep never throws", () => {
 function realTools(): Map<string, Callback> {
   const spy = vi.spyOn(McpServer.prototype, "registerTool");
   try {
-    createServerFactory(ownerPrincipal())({ era: "modern" } as never);
+    createServerFactory(ownerPrincipal(), [], undefined, ALL_TOOLS_POLICY)({ era: "modern" } as never);
     const tools = new Map<string, Callback>();
     for (const call of spy.mock.calls as unknown as [string, unknown, Callback][]) {
       const [name, , callback] = call;

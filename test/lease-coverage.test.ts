@@ -69,6 +69,7 @@ import {
   taggedOk,
   wire,
 } from "./fixtures/icloud-bytes";
+import { ALL_TOOLS_POLICY } from "./fixtures/all-tools";
 
 type ToolAnswer = { content: { type: "text"; text: string }[]; isError?: boolean };
 type Callback = (args: Record<string, unknown>, extra?: unknown) => Promise<ToolAnswer>;
@@ -91,7 +92,7 @@ const SERVER_SOURCE: string = Object.values(SERVER_SOURCE_GLOB)[0] ?? "";
 function realTools(grantClient?: () => Promise<string | null>): Map<string, Callback> {
   const spy = vi.spyOn(McpServer.prototype, "registerTool");
   try {
-    createServerFactory(ownerPrincipal(), [], grantClient)({ era: "modern" } as never);
+    createServerFactory(ownerPrincipal(), [], grantClient, ALL_TOOLS_POLICY)({ era: "modern" } as never);
     const tools = new Map<string, Callback>();
     for (const call of spy.mock.calls as unknown as [string, unknown, Callback][]) {
       const [name, , callback] = call;

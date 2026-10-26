@@ -13,6 +13,8 @@ import { answersDuringPause } from "../password-pause";
 import type { Principal } from "../principal";
 import { type GrantClient, withRecallStep } from "../recall/drive";
 import { SERVER_INSTRUCTIONS } from "./instructions";
+import { withToolPolicy } from "./tool-filter";
+import { DEFAULT_TOOL_POLICY, type ToolPolicy } from "./tool-policy";
 import { registerAccountTool } from "./tools/account";
 import { registerCalendarTools } from "./tools/calendar";
 import { registerChangesTool } from "./tools/changes";
@@ -55,6 +57,11 @@ export function createServerFactory(
   // built without knowing whose grant it serves never indexes anybody's mail.
   // The door is the only production caller and passes the real reader.
   grantClient: GrantClient = async () => null,
+  // Which tools this deployment serves (`./tool-policy.ts`). The door parses
+  // it from the Worker vars on every request and passes it in. The default is
+  // the policy of a deployment that sets none of them: every risky tool off.
+  // So a factory built without one serves fewer tools, never more.
+  policy: ToolPolicy = DEFAULT_TOOL_POLICY,
 ): McpServerFactory {
   return () => {
     // The second argument is the SDK's `ServerOptions`, and `instructions` is
@@ -65,10 +72,21 @@ export function createServerFactory(
     // by `Server._oninitialize` / `Server._ondiscover`. Omitting it is what this
     // server did until now, and every boundary was being inferred from tool
     // names -- see `./instructions.ts` for the measurement that prompted it.
-    const server = new McpServer(
+    const mcpServer = new McpServer(
       { name: "icloud-mcp", version: "0.1.0" },
       { instructions: SERVER_INSTRUCTIONS },
     );
+    // **The tool switches, applied to every registrar below** (`./tool-filter.ts`).
+    // `server` is the same server, except that a tool the policy switches off
+    // is never registered, and each commit tool refuses a confirmation minted
+    // by a preview tool that is now off. Every registrar, and the driven server
+    // built from it below, goes through this one name, so no tool can be
+    // registered around it. The filter is the innermost layer: the recall step
+    // wraps the filter, so a refusal returns before the step could run.
+    //
+    // The test seam `extraTools` registers on the raw server at the end: its
+    // tools are test-only and in no catalogue, and production passes none.
+    const server = withToolPolicy(mcpServer, policy, principal);
     // Request-scoped BY CONSTRUCTION. This factory body runs once per request,
     // so the gate below cannot be shared with another caller — no bookkeeping,
     // no isolate-wide counter, and therefore no false refusal of a legitimate
@@ -214,7 +232,7 @@ export function createServerFactory(
     // so the read takes the person's lease like every mail tool. The grant
     // client, so the autonomy key is refused here as the backfill refuses it.
     registerSaveTool(server, leasedMail, principal, grantClient);
-    for (const register of extraTools) register(server);
-    return server;
+    for (const register of extraTools) register(mcpServer);
+    return mcpServer;
   };
 }

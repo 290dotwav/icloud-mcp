@@ -218,6 +218,103 @@ runs.
 Each tool's full input parameters are in its input schema, which the server
 sends with the tool list, so an MCP client shows them with the tool.
 
+### Tool switches
+
+The table above lists every tool the server has. Not all of them are on. Three
+optional Worker vars decide which tools a deployment serves.
+
+| Var | Format | Default (unset or empty) | Effect |
+|-----|--------|--------------------------|--------|
+| `ENABLE_RISKY_TOOLS` | Comma-separated names | Nothing | Switches on the risky tools, and the `calendar_attendees` capability, that it names |
+| `DISABLED_TOOLS` | Comma-separated names | Nothing | Switches off any tool it names |
+| `MCP_READ_ONLY` | `true` or `false` | `false` | `true` switches off every tool that writes |
+
+**Off by default.** These five tools are off unless `ENABLE_RISKY_TOOLS` names
+them: `mail_trash`, `mail_delete_draft`, `calendar_delete_event`,
+`calendar_delete_calendar` and `calendar_respond_to_invitation`. So is the
+`calendar_attendees` capability. Without it, `calendar_create_event` refuses
+any attendee, and `calendar_update_event` refuses to change an event that has
+attendees, because iCloud would email those people.
+
+**What read-only switches off.** Every preview and every commit, both compose
+tools and the two attachment staging tools, read status, the flag, moves, every
+calendar write, every contact write, and `rules_add`, `rules_commit` and
+`rules_remove`. Reads stay on, including `mail_save_attachment`,
+`mail_recall_backfill` and `rules_test`: they change nothing in your iCloud
+account.
+
+**Off always wins.** A tool named in `DISABLED_TOOLS`, or a write while
+`MCP_READ_ONLY` is `true`, stays off even if `ENABLE_RISKY_TOOLS` names it.
+
+**Where it is enforced.** At two levels:
+
+1. A tool that is off is never registered. It is not in `tools/list`, and a
+   call naming it is refused.
+2. `mail_commit`, `calendar_commit`, `contacts_commit` and `rules_commit` read
+   which preview made the confirmation they are handed. If that preview tool is
+   now off, they refuse it and spend nothing. This holds for a valid
+   confirmation made before the tool was switched off.
+
+The rules job cannot get around either level: it reaches mail only by calling
+this server's own `/mcp`, through the same door and the same switches.
+
+**A typo stops the server.** A name the server does not know, a tool in
+`ENABLE_RISKY_TOOLS` that is not risky, or an `MCP_READ_ONLY` value that is
+neither `true` nor `false` makes every `/mcp` request answer `503` with a
+message naming the problem. Nothing is served until it is fixed. A typo in
+`DISABLED_TOOLS` therefore never leaves a tool on in silence.
+
+#### How to change them
+
+**In `wrangler.jsonc` (recommended).** Edit the `vars` block, then deploy:
+
+```jsonc
+"vars": {
+  "R2_ACCOUNT_ID": "…",
+  "ALLOWED_APPLE_IDS_SEED": "[\"you@example.com\"]",
+  "ENABLE_RISKY_TOOLS": "mail_trash,calendar_attendees",
+  "DISABLED_TOOLS": "",
+  "MCP_READ_ONLY": "false"
+}
+```
+
+```bash
+npm run deploy
+```
+
+**In the Cloudflare dashboard.** Workers & Pages → your Worker → **Settings** →
+**Variables and Secrets** → add or edit the variable as type **Text** →
+**Deploy**. The change applies from the version that deploys.
+
+> **A `wrangler deploy` overwrites the dashboard.** Cloudflare's documentation
+> is explicit: without `keep_vars`, Wrangler deletes all vars before setting the
+> ones in your Wrangler configuration. A switch you set only in the dashboard
+> is gone after your next `npm run deploy`. For `MCP_READ_ONLY` or
+> `DISABLED_TOOLS`, that means a tool quietly comes back on. To keep dashboard
+> values across deploys, add `"keep_vars": true` at the top level of
+> `wrangler.jsonc`. The simplest rule is one home: keep the switches in
+> `wrangler.jsonc`. Secrets are never deleted by a deploy either way.
+> (Sources: Cloudflare's Wrangler configuration page, "Source of truth", and
+> the `--keep-vars` flag of `wrangler deploy`, read on 2026-10-26. The
+> documentation does not say which value wins when a var is set in both places
+> with `keep_vars` on; verify that before relying on it.)
+
+#### What the switches do not cover
+
+- `mail_move` can still move mail to the Trash folder while `mail_trash` is
+  off, because it moves to any folder. Nothing is removed for good either way.
+  To stop it, add `mail_move` to `DISABLED_TOOLS`.
+- `calendar_delete_event`, once you switch it on, is not gated by
+  `calendar_attendees`. Whether iCloud emails a cancellation when an event with
+  attendees is deleted has not been measured.
+- Switching off `account_whoami`, or a misconfigured server, stops a sign-in
+  from arming its autonomy key, and arming fails toward off. Switching off
+  `changes_since`, `mail_flag` or `mail_compose_reply`, or turning on
+  read-only, stops the rules job's matching steps. The job then counts those
+  calls as failures and waits longer between tries. It never counts them as a
+  refused password.
+- The server instructions a client is shown still describe every tool.
+
 ---
 
 ## Requirements
@@ -284,6 +381,9 @@ Edit these values in your git-ignored `wrangler.jsonc`:
 - `vars.ALLOWED_APPLE_IDS_SEED` → your own Apple ID, as a one-element JSON array
   string: `"[\"you@example.com\"]"`
 - `kv_namespaces[].id` → the five ids from step 2
+- optionally `vars.ENABLE_RISKY_TOOLS`, `vars.DISABLED_TOOLS` and
+  `vars.MCP_READ_ONLY` → see [Tool switches](#tool-switches). Left as the
+  template has them, the five risky tools stay off.
 
 Leave the other bindings as they are. `vectorize[0].index_name` must match the
 index you created. `services[0].service` must equal `name` at the top of the
